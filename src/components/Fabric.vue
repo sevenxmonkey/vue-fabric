@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="whole">
     <div class="top-menu">
       <el-button
         @click="handleCropping"
@@ -22,12 +22,13 @@
     <el-upload class="image-uploader" action="/api/bg_remove" :before-upload="fileUpload">
       <el-button :plain="mode!=='init'" type="primary" size="mini">Add image</el-button>
     </el-upload>
-    <img v-if="testURL" :src="testURL" width="600" height="600" />
+    <img v-if="brushURL" :src="brushURL" width="600" height="600" />
   </div>
 </template>
 
 <script>
 import { fabric } from "fabric";
+import Jimp from "jimp";
 
 export default {
   name: "Fabric",
@@ -36,6 +37,8 @@ export default {
       fcanvas: null,
       fimg: null,
       frect: null,
+
+      fbrushArr: [],
 
       file: null,
 
@@ -46,7 +49,7 @@ export default {
         to: {},
       },
 
-      testURL: "",
+      brushURL: "",
     };
   },
   mounted() {
@@ -72,8 +75,9 @@ export default {
       } else {
         this.mode = "erase";
         this.fcanvas.isDrawingMode = true;
+
         this.fcanvas.freeDrawingBrush.color = "rgb(245, 245, 245)";
-        // this.fcanvas.freeDrawingBrush.color = "red";
+        // this.fcanvas.freeDrawingBrush.color = "black";
         this.fcanvas.freeDrawingBrush.width = 30;
       }
     },
@@ -94,10 +98,8 @@ export default {
     init() {
       const self = this;
       this.frect = new fabric.Rect({
-        fill: "transparent",
-        selectable: true,
-        strokeWidth: 3,
-        // stroke: "green",
+        fill: "white",
+        selectable: false,
         absolutePositioned: true,
       });
       this.fcanvas.add(this.frect);
@@ -135,11 +137,11 @@ export default {
         }
       });
 
-      //   this.fcanvas.on("path:created", function (options) {
-      //     if (self.mode === "erase") {
-      //       self.fbrushArr.push(options.path);
-      //     }
-      //   });
+        this.fcanvas.on("path:created", function (options) {
+          if (self.mode === "erase") {
+            self.fbrushArr.push(options.path);
+          }
+        });
 
       this.fcanvas.forEachObject((o) => {
         o.selectable = false;
@@ -199,10 +201,7 @@ export default {
       const width = Math.abs(this.rect.from.x - this.rect.to.x);
       const height = Math.abs(this.rect.from.y - this.rect.to.y);
 
-      // self.mousedownPoint = null;
-
       if (width < 20 || height < 20) {
-        // Treats small area as mis-clicked
         return;
       }
 
@@ -221,18 +220,53 @@ export default {
         this.fcanvas.remove(this.frect);
       }
     },
-
     importImage() {
-      const rect = this.fimg.clipPath;
-      rect.fill = "rgb(245, 245, 245)";
-      this.fcanvas.add(rect);
-
-      this.fcanvas.remove(this.fimg);
-      this.testURL = this.fcanvas.toDataURL();
-
-      this.fcanvas.add(this.fimg);
-      this.fcanvas.remove(rect);
-      this.fimg.sendToBack();
+      this.adjustMask()
+    },
+    adjustMask() {
+      const self = this;
+      const backgroundRect = new fabric.Rect({
+        fill: "black",
+        width: 600,
+        height: 600,
+        absolutePositioned: true,
+      });
+      const newCanvas = new fabric.Canvas(null, {
+        width: 600,
+        height: 600,
+        selectable: false,
+        absolutePositioned: true
+      });
+      newCanvas.add(backgroundRect);
+      newCanvas.add(this.frect);
+      self.fbrushArr.forEach((brush) => {
+        brush.stroke = "black"
+        // console.log(brush);
+        newCanvas.add(brush);
+      })
+      
+      const alphaMask = newCanvas.toDataURL();
+      Jimp.read(alphaMask, (err, mask) => {
+        if(err) throw err;
+        self.genPng(mask);
+      })
+      
+    },
+    genPng(mask) {
+      const self = this;
+      // this.fcanvas.clipPath = null;
+      this.fcanvas.remove(this.frect)
+      const imgIncode = this.fcanvas.toDataURL();
+      Jimp.read(imgIncode, (err, image) => {
+        if (err) throw err;
+        image
+          .mask(mask, 0, 0)
+          .getBase64Async(Jimp.MIME_PNG)
+          .then((data) => {
+            self.brushURL = data;
+            self.reset();
+          });
+      });
     },
   },
 };
@@ -243,6 +277,7 @@ export default {
   cursor: crosshair;
   border: 1px dashed rgb(165, 165, 165);
   background-color: rgb(245, 245, 245);
+  /* background-color: black; */
   border-radius: 5px;
 }
 .image-uploader {
@@ -252,4 +287,5 @@ export default {
 .top-menu {
   margin-bottom: 10px;
 }
+
 </style>

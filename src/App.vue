@@ -1,16 +1,19 @@
 <template>
   <div id="app">
     <Fabric />
+    <!-- <AlphaMask /> -->
   </div>
 </template>
 
 <script>
 import Fabric from './components/Fabric'
+// import AlphaMask from './components/AlphaMask'
 
 export default {
   name: 'App',
   components: {
-    Fabric
+    Fabric,
+    // AlphaMask
   }
 }
 </script>
